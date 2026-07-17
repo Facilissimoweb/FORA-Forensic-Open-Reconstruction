@@ -1,1 +1,25 @@
 @import "tailwindcss";
+
+/* Google Translate Widget Overrides for a Premium Native UI Look */
+.goog-te-banner-frame.skiptranslate,
+.goog-te-banner-frame,
+#goog-gt-tt,
+.goog-te-balloon-frame {
+  display: none !important;
+}
+body {
+  top: 0px !important;
+}
+.goog-text-highlight {
+  background-color: transparent !important;
+  box-shadow: none !important;
+  border: none !important;
+}
+/* Hide google translate branding and dropdown wrapper completely */
+.skiptranslate iframe,
+iframe.goog-te-banner-frame {
+  display: none !important;
+}
+#google_translate_element {
+  display: none !important;
+}

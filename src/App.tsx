@@ -18,6 +18,7 @@ import {
   Smartphone,
   Check,
   X,
+  Menu,
   Mail,
   User,
   Building,
@@ -25,15 +26,136 @@ import {
   MessageSquare,
   Sparkles,
   Send,
-  Trash2
+  Trash2,
+  Globe
 } from 'lucide-react';
 import { EvidenceMarker, Trajectory } from './types';
 import Forensic3DWorkspace from './components/Forensic3DWorkspace';
 import { translations, Language } from './translations';
 
+const GOOGLE_LANGUAGES = [
+  { code: 'it', name: 'Italiano', flag: '🇮🇹' },
+  { code: 'en', name: 'English', flag: '🇬🇧' },
+  { code: 'es', name: 'Español', flag: '🇪🇸' },
+  { code: 'fr', name: 'Français', flag: '🇫🇷' },
+  { code: 'de', name: 'Deutsch', flag: '🇩🇪' },
+  { code: 'pt', name: 'Português', flag: '🇵🇹' },
+  { code: 'nl', name: 'Nederlands', flag: '🇳🇱' },
+  { code: 'pl', name: 'Polski', flag: '🇵🇱' },
+  { code: 'ro', name: 'Română', flag: '🇷🇴' },
+  { code: 'sv', name: 'Svenska', flag: '🇸🇪' },
+  { code: 'tr', name: 'Türkçe', flag: '🇹🇷' },
+  { code: 'ru', name: 'Русский', flag: '🇷🇺' },
+  { code: 'ar', name: 'العربية', flag: '🇸🇦' },
+  { code: 'hi', name: 'हिन्दी', flag: '🇮🇳' },
+  { code: 'zh-CN', name: '中文 (简体)', flag: '🇨🇳' },
+  { code: 'ja', name: '日本語', flag: '🇯🇵' },
+  { code: 'ko', name: '한국어', flag: '🇰🇷' }
+];
+
 export default function App() {
   const [language, setLanguage] = useState<Language>('it');
+  const [selectedGoogleLang, setSelectedGoogleLang] = useState<string>('it');
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
   const t = translations[language];
+
+  // Click outside language dropdown
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  // Initialize Google Translate Element dynamically
+  useEffect(() => {
+    // Define global initialization callback
+    (window as any).googleTranslateElementInit = () => {
+      new (window as any).google.translate.TranslateElement({
+        pageLanguage: 'it',
+        layout: (window as any).google.translate.TranslateElement.InlineLayout.SIMPLE,
+        autoDisplay: false
+      }, 'google_translate_element');
+    };
+
+    // Load Translate Element Script
+    const id = 'google-translate-script';
+    if (!document.getElementById(id)) {
+      const script = document.createElement('script');
+      script.id = id;
+      script.src = 'https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit';
+      script.async = true;
+      document.body.appendChild(script);
+    }
+
+    // Read existing googtrans cookie to synchronize selectedGoogleLang state
+    const getCookie = (name: string) => {
+      const value = `; ${document.cookie}`;
+      const parts = value.split(`; ${name}=`);
+      if (parts.length === 2) return parts.pop()?.split(';').shift();
+      return null;
+    };
+    
+    const googtransVal = getCookie('googtrans');
+    if (googtransVal) {
+      const match = googtransVal.match(/\/it\/([a-zA-Z\-]+)/);
+      if (match && match[1]) {
+        const savedLang = match[1];
+        setSelectedGoogleLang(savedLang);
+        if (savedLang === 'it' || savedLang === 'en' || savedLang === 'es') {
+          setLanguage(savedLang);
+        } else {
+          setLanguage('it'); // Keep base template as 'it' to translate from Italian correctly
+        }
+      }
+    }
+  }, []);
+
+  const handleLanguageChange = (langCode: string) => {
+    setSelectedGoogleLang(langCode);
+    setDropdownOpen(false);
+
+    // 1. Manage React template state
+    if (langCode === 'it') {
+      setLanguage('it');
+    } else if (langCode === 'en') {
+      setLanguage('en');
+    } else if (langCode === 'es') {
+      setLanguage('es');
+    } else {
+      setLanguage('it'); // Keep base template as 'it' to translate from Italian correctly
+    }
+
+    // 2. Set the googtrans cookie
+    document.cookie = `googtrans=/it/${langCode}; path=/;`;
+    document.cookie = `googtrans=/it/${langCode}; path=/; domain=${window.location.hostname};`;
+
+    // 3. Programmatically change language inside hidden widget
+    const selectEl = document.querySelector('.goog-te-combo') as HTMLSelectElement;
+    if (selectEl) {
+      selectEl.value = langCode;
+      selectEl.dispatchEvent(new Event('change'));
+    } else {
+      // Fallback: wait and retry, then reload if still not present
+      setTimeout(() => {
+        const retrySelectEl = document.querySelector('.goog-te-combo') as HTMLSelectElement;
+        if (retrySelectEl) {
+          retrySelectEl.value = langCode;
+          retrySelectEl.dispatchEvent(new Event('change'));
+        } else {
+          window.location.reload();
+        }
+      }, 400);
+    }
+  };
 
   // Pre-loaded realistic sandbox case data
   const [markers, setMarkers] = useState<EvidenceMarker[]>([
@@ -230,35 +352,135 @@ export default function App() {
           </nav>
 
           {/* Fast interactive CTA & Language Switcher */}
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2 sm:space-x-3">
             
-            {/* Elegant Language Switcher */}
-            <div className="flex items-center bg-slate-900 border border-slate-850 rounded-lg p-0.5 text-[10px] font-mono shadow-inner mr-1">
-              {(['it', 'en', 'es'] as const).map(lang => (
-                <button
-                  key={lang}
-                  onClick={() => setLanguage(lang)}
-                  className={`px-1.5 py-0.5 rounded uppercase font-black transition-all cursor-pointer ${
-                    language === lang 
-                      ? 'bg-emerald-500 text-slate-950 font-extrabold' 
-                      : 'text-slate-400 hover:text-white hover:bg-slate-800'
-                  }`}
-                >
-                  {lang}
-                </button>
-              ))}
+            {/* Elegant Language Switcher with At Least 15 Languages (Google Translate) */}
+            <div className="relative mr-1" ref={dropdownRef}>
+              <button
+                onClick={() => setDropdownOpen(!dropdownOpen)}
+                className="flex items-center space-x-1.5 sm:space-x-2 bg-slate-900 hover:bg-slate-850 text-slate-200 border border-slate-800 rounded-xl px-2.5 py-1.5 sm:px-3 sm:py-2 text-xs font-semibold font-mono cursor-pointer transition-all hover:border-emerald-500/30 shadow-inner"
+              >
+                <Globe className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                <span className="text-slate-300 hidden xs:inline">
+                  {GOOGLE_LANGUAGES.find(l => l.code === selectedGoogleLang)?.flag || '🇮🇹'}{' '}
+                  {GOOGLE_LANGUAGES.find(l => l.code === selectedGoogleLang)?.name || 'Italiano'}
+                </span>
+                <span className="text-slate-300 xs:hidden">
+                  {GOOGLE_LANGUAGES.find(l => l.code === selectedGoogleLang)?.flag || '🇮🇹'}
+                </span>
+                <ChevronDown className="h-3 w-3 text-slate-500 transition-transform" />
+              </button>
+
+              {/* Invisible Google Translate element used by script */}
+              <div id="google_translate_element" className="absolute opacity-0 pointer-events-none h-0 w-0 overflow-hidden" />
+
+              {dropdownOpen && (
+                <div className="absolute right-0 mt-2 w-56 max-h-72 overflow-y-auto bg-slate-950/95 backdrop-blur-md border border-slate-850 rounded-2xl shadow-2xl z-50 py-1.5">
+                  <div className="px-3 py-1.5 border-b border-slate-900 mb-1 text-[9px] uppercase font-bold text-slate-500 font-mono tracking-widest">
+                    Select Language
+                  </div>
+                  {GOOGLE_LANGUAGES.map(lang => (
+                    <button
+                      key={lang.code}
+                      onClick={() => handleLanguageChange(lang.code)}
+                      className={`w-full text-left px-4 py-2 text-xs flex items-center justify-between transition-colors cursor-pointer ${
+                        selectedGoogleLang === lang.code
+                          ? 'bg-emerald-500/10 text-emerald-400 font-black'
+                          : 'text-slate-400 hover:bg-slate-900 hover:text-white'
+                      }`}
+                    >
+                      <span className="flex items-center space-x-2.5 font-sans">
+                        <span className="text-sm shrink-0">{lang.flag}</span>
+                        <span>{lang.name}</span>
+                      </span>
+                      {selectedGoogleLang === lang.code && (
+                        <Check className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
+            {/* Desktop CTA Button */}
             <a 
               href="#demo" 
-              className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 px-4 py-2 rounded-xl text-xs font-bold tracking-wide uppercase transition-all shadow-lg shadow-emerald-500/20 hover:scale-102 flex items-center space-x-1"
+              className="hidden sm:flex bg-emerald-500 hover:bg-emerald-600 text-slate-950 px-4 py-2 rounded-xl text-xs font-bold tracking-wide uppercase transition-all shadow-lg shadow-emerald-500/20 hover:scale-102 items-center space-x-1"
             >
               <span>{t.nav.cta}</span>
               <ChevronRight className="h-3.5 w-3.5" />
             </a>
+
+            {/* Hamburger Button for Mobile/Tablet */}
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="flex md:hidden items-center justify-center p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-white hover:border-emerald-500/30 transition-all focus:outline-none"
+              aria-label="Toggle Menu"
+            >
+              {mobileMenuOpen ? <X className="h-4 w-4 text-rose-400" /> : <Menu className="h-4 w-4 text-slate-300" />}
+            </button>
           </div>
 
         </div>
+
+        {/* Mobile Navigation Dropdown Menu (Hamburger Menu Items) */}
+        {mobileMenuOpen && (
+          <div className="md:hidden border-t border-slate-900 bg-slate-950/95 backdrop-blur-lg shadow-2xl overflow-hidden animate-in slide-in-from-top duration-200">
+            <div className="px-4 py-4 space-y-2.5">
+              <a 
+                href="#vision" 
+                onClick={() => setMobileMenuOpen(false)}
+                className="block px-3 py-2.5 rounded-xl text-sm font-semibold text-slate-300 hover:text-emerald-400 hover:bg-slate-900/60 transition-all"
+              >
+                {t.nav.vision}
+              </a>
+              <a 
+                href="#pipeline" 
+                onClick={() => setMobileMenuOpen(false)}
+                className="block px-3 py-2.5 rounded-xl text-sm font-semibold text-slate-300 hover:text-emerald-400 hover:bg-slate-900/60 transition-all"
+              >
+                {t.nav.pipeline}
+              </a>
+              <a 
+                href="#demo" 
+                onClick={() => setMobileMenuOpen(false)}
+                className="block px-3 py-2.5 rounded-xl text-sm font-extrabold text-emerald-400 hover:text-emerald-300 hover:bg-slate-900/60 transition-all flex items-center space-x-2"
+              >
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                <span>{t.nav.demo}</span>
+              </a>
+              <a 
+                href="#market" 
+                onClick={() => setMobileMenuOpen(false)}
+                className="block px-3 py-2.5 rounded-xl text-sm font-semibold text-slate-300 hover:text-emerald-400 hover:bg-slate-900/60 transition-all"
+              >
+                {t.nav.market}
+              </a>
+              <a 
+                href="#faq" 
+                onClick={() => setMobileMenuOpen(false)}
+                className="block px-3 py-2.5 rounded-xl text-sm font-semibold text-slate-300 hover:text-emerald-400 hover:bg-slate-900/60 transition-all"
+              >
+                {t.nav.faq}
+              </a>
+              
+              {/* Extra Mobile CTA button */}
+              <div className="pt-2.5 border-t border-slate-900">
+                <a 
+                  href="#demo" 
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 px-4 py-3 rounded-xl text-xs font-bold tracking-wide uppercase transition-all shadow-lg shadow-emerald-500/20 flex items-center justify-center space-x-1"
+                >
+                  <span>{t.nav.cta}</span>
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </a>
+              </div>
+            </div>
+          </div>
+        )}
       </header>
 
       {/* 2. HERO SECTION */}
