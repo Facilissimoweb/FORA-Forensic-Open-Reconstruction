@@ -1,0 +1,6 @@
+{
+  "name": "FORA",
+  "description": "Ecosistema 3D interattivo e AR per indagini forensi e ricostruzione scientifica delle scene del crimine.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
