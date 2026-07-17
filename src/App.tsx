@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   Shield, 
   ChevronRight, 
@@ -22,12 +22,19 @@ import {
   User,
   Building,
   Phone,
-  MessageSquare
+  MessageSquare,
+  Sparkles,
+  Send,
+  Trash2
 } from 'lucide-react';
 import { EvidenceMarker, Trajectory } from './types';
 import Forensic3DWorkspace from './components/Forensic3DWorkspace';
+import { translations, Language } from './translations';
 
 export default function App() {
+  const [language, setLanguage] = useState<Language>('it');
+  const t = translations[language];
+
   // Pre-loaded realistic sandbox case data
   const [markers, setMarkers] = useState<EvidenceMarker[]>([
     {
@@ -97,35 +104,94 @@ export default function App() {
     message: ''
   });
 
+  // AI Forensic Chat States
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState<Array<{role: 'user' | 'assistant', content: string}>>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatLoading, setChatLoading] = useState(false);
+  const chatBottomRef = useRef<HTMLDivElement>(null);
+
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formFields.name || !formFields.email) return;
     setFormSubmitted(true);
   };
 
-  // FAQ mock database
-  const faqs = [
-    {
-      q: "Le ricostruzioni 3D e AR di FORA sono legalmente ammissibili in un tribunale italiano?",
-      a: "Sì, l'art. 397/2000 del codice di procedura penale inerente alle indagini difensive e la giurisprudenza corrente ammettono la presentazione di prove digitali, animazioni e rilievi geometrici in aula. Il fattore determinante di FORA è la totale trasparenza scientifica: l'uso di algoritmi open-source verificabili consente ai periti delle controparti di controllare le formule matematiche usate, evitando contestazioni su scatole nere proprietarie."
-    },
-    {
-      q: "In che modo viene garantita la precisione metrica delle scansioni?",
-      a: "La precisione millimetrica 1:1 viene stabilita tramite l'introduzione nella fotorilevazione di un oggetto a dimensione nota (es. barra di calibrazione metallica o marker certificati). Durante la pipeline di calibrazione spaziale in Blender, gli assi geometrici vengono riscalati secondo questa proporzione aurea, certificando che ogni misurazione lineare, volumetrica o angolare corrisponda rigorosamente allo spazio reale."
-    },
-    {
-      q: "L'applicazione supporta i rilievi effettuati tramite sensori LiDAR degli smartphone?",
-      a: "Assolutamente. FORA adotta una flessibilità di pipeline agnostica. È possibile importare ed allineare nuvole di punti (.PLY, .OBJ) ottenute direttamente dai sensori LiDAR nativi di smartphone e tablet (es. iPad Pro, iPhone Pro) o da laser scanner industriali fissi, offrendo un'eccellente precisione sul campo senza richiedere attrezzatura ingombrante."
-    },
-    {
-      q: "Qual è il vantaggio di usare la combinazione Meshroom - Blender - Godot?",
-      a: "Questa pipeline fonde il top dei tre mondi: Meshroom esegue una fotogrammetria automatica, affidabile e open-source sui pixel fotografici. Blender ottimizza e calibra la mesh con precisione millimetrica. Godot Engine (FORA Core) consente un'esplorazione 3D e un rendering interattivo a frame rate elevatissimo sul web o in visori AR portatili, fornendo l'ideale per i giudici per camminare virtualmente nella scena."
-    },
-    {
-      q: "Come vengono protetti i dati sensibili delle indagini?",
-      a: "La privacy è una priorità assoluta per le indagini penali. Per questo motivo, la suite software FORA è progettata per girare interamente On-Premise. I dati fotogrammetrici, le informazioni sui casi e i modelli 3D vengono elaborati localmente sulle macchine dell'ufficio peritale o della procura, senza inviare dati sensibili a server cloud esterni o di terze parti."
+  // Predefined Chat Questions
+  const suggestedQuestions = {
+    it: [
+      "Che valore ha questa perizia in tribunale ai sensi della L. 397/2000?",
+      "Analizza i reperti correnti in questo dossier forense.",
+      "Come posso posizionare un reperto nel simulatore 3D?",
+      "Spiega come interpretare l'elevazione e l'azimuth della traiettoria balistica."
+    ],
+    en: [
+      "What is the court admissibility of this 3D scan under Italian law?",
+      "Analyze the current evidence markers in this forensic file.",
+      "How can I place an evidence marker in the 3D simulator?",
+      "Explain how to interpret the elevation and azimuth of the ballistic trajectory."
+    ],
+    es: [
+      "¿Qué admisibilidad judicial tiene esta pericia 3D según la ley?",
+      "Analiza las evidencias actuales registradas en este expediente.",
+      "¿Cómo puedo colocar un testigo de evidencia en el simulador 3D?",
+      "Explica cómo interpretar la elevación y azimuth de la trayectoria balística."
+    ]
+  };
+
+  const handleSendChatMessage = async (customText?: string) => {
+    const textToSend = customText || chatInput;
+    if (!textToSend.trim() || chatLoading) return;
+
+    const userText = textToSend.trim();
+    if (!customText) setChatInput('');
+
+    const newMessages = [...chatMessages, { role: 'user' as const, content: userText }];
+    setChatMessages(newMessages);
+    setChatLoading(true);
+
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messages: newMessages,
+          activeLanguage: language,
+          contextData: {
+            caseInfo,
+            markers,
+            trajectories
+          }
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Chat request failed');
+      }
+
+      const data = await response.json();
+      setChatMessages(prev => [...prev, { role: 'assistant' as const, content: data.text }]);
+    } catch (error) {
+      console.error(error);
+      const errMsg = language === 'it' 
+        ? 'Errore di connessione con il consulente scientifico AI. Riprova più tardi.' 
+        : language === 'es'
+        ? 'Error de conexión con el asistente científico de IA. Inténtelo más tarde.'
+        : 'Connection error with the AI scientific assistant. Please try again later.';
+      setChatMessages(prev => [...prev, { role: 'assistant' as const, content: errMsg }]);
+    } finally {
+      setChatLoading(false);
     }
-  ];
+  };
+
+  // Auto-scroll chat history
+  useEffect(() => {
+    if (chatBottomRef.current) {
+      chatBottomRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [chatMessages, chatLoading, chatOpen]);
 
   return (
     <div className="bg-slate-950 text-slate-100 min-h-screen selection:bg-emerald-500 selection:text-slate-950 scroll-smooth">
@@ -150,26 +216,44 @@ export default function App() {
 
           {/* Navigation Anchors */}
           <nav className="hidden md:flex items-center space-x-8 text-xs font-bold uppercase tracking-wider text-slate-400">
-            <a href="#vision" className="hover:text-emerald-400 transition-colors">Visione</a>
-            <a href="#pipeline" className="hover:text-emerald-400 transition-colors">La Pipeline</a>
+            <a href="#vision" className="hover:text-emerald-400 transition-colors">{t.nav.vision}</a>
+            <a href="#pipeline" className="hover:text-emerald-400 transition-colors">{t.nav.pipeline}</a>
             <a href="#demo" className="text-emerald-400 flex items-center space-x-1 font-extrabold hover:text-emerald-300 transition-all">
               <span className="relative flex h-2 w-2 mr-1">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
               </span>
-              Laboratorio 3D
+              {t.nav.demo}
             </a>
-            <a href="#market" className="hover:text-emerald-400 transition-colors">Vantaggi & Mercato</a>
-            <a href="#faq" className="hover:text-emerald-400 transition-colors">FAQ</a>
+            <a href="#market" className="hover:text-emerald-400 transition-colors">{t.nav.market}</a>
+            <a href="#faq" className="hover:text-emerald-400 transition-colors">{t.nav.faq}</a>
           </nav>
 
-          {/* Fast interactive CTA */}
+          {/* Fast interactive CTA & Language Switcher */}
           <div className="flex items-center space-x-3">
+            
+            {/* Elegant Language Switcher */}
+            <div className="flex items-center bg-slate-900 border border-slate-850 rounded-lg p-0.5 text-[10px] font-mono shadow-inner mr-1">
+              {(['it', 'en', 'es'] as const).map(lang => (
+                <button
+                  key={lang}
+                  onClick={() => setLanguage(lang)}
+                  className={`px-1.5 py-0.5 rounded uppercase font-black transition-all cursor-pointer ${
+                    language === lang 
+                      ? 'bg-emerald-500 text-slate-950 font-extrabold' 
+                      : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                  }`}
+                >
+                  {lang}
+                </button>
+              ))}
+            </div>
+
             <a 
               href="#demo" 
               className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 px-4 py-2 rounded-xl text-xs font-bold tracking-wide uppercase transition-all shadow-lg shadow-emerald-500/20 hover:scale-102 flex items-center space-x-1"
             >
-              <span>Avvia Demo</span>
+              <span>{t.nav.cta}</span>
               <ChevronRight className="h-3.5 w-3.5" />
             </a>
           </div>
@@ -188,16 +272,16 @@ export default function App() {
           {/* Tag badge info */}
           <div className="inline-flex items-center px-3.5 py-1.5 rounded-full text-[11px] font-bold font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 mb-8 uppercase tracking-widest">
             <Scale className="h-3.5 w-3.5 mr-1.5 text-emerald-500" />
-            La Suite Scientifica Trasparente per l'Ingegneria Forense
+            {t.hero.badge}
           </div>
 
           <h1 className="text-4xl sm:text-6xl font-black tracking-tight text-white mb-6 leading-tight">
-            Ricostruisci la scena del crimine<br />
-            <span className="bg-gradient-to-r from-emerald-400 via-teal-400 to-emerald-500 bg-clip-text text-transparent">in 3D e Realtà Aumentata</span>
+            {t.hero.title1}<br />
+            <span className="bg-gradient-to-r from-emerald-400 via-teal-400 to-emerald-500 bg-clip-text text-transparent">{t.hero.titleHighlight}</span>
           </h1>
 
           <p className="max-w-3xl mx-auto text-sm sm:text-lg text-slate-400 mb-10 leading-relaxed font-sans">
-            FORA è l'ecosistema enterprise chiavi in mano che converte fotorilevazioni bidimensionali in modelli tridimensionali matematicamente inoppugnabili. Offriamo a procure, periti, investigatori e tribunali la massima usabilità unita alla totale trasparenza scientifica dei nostri algoritmi core open-source.
+            {t.hero.description}
           </p>
 
           <div className="flex flex-col sm:flex-row justify-center items-center gap-4 max-w-lg mx-auto">
@@ -206,34 +290,34 @@ export default function App() {
               className="w-full sm:w-auto bg-emerald-500 hover:bg-emerald-600 text-slate-950 px-8 py-4 rounded-2xl text-sm font-bold uppercase tracking-wider transition-all shadow-xl shadow-emerald-500/20 flex items-center justify-center space-x-2 border border-emerald-400/20 hover:scale-102"
             >
               <Cpu className="h-4.5 w-4.5" />
-              <span>Simulatore Interattivo</span>
+              <span>{t.hero.ctaDemo}</span>
             </a>
             <a 
               href="#pipeline" 
               className="w-full sm:w-auto border border-slate-800 hover:border-slate-700 hover:bg-slate-900 text-slate-300 px-8 py-4 rounded-2xl text-sm font-bold uppercase tracking-wider transition-all flex items-center justify-center space-x-2"
             >
               <GitBranch className="h-4.5 w-4.5 text-slate-500" />
-              <span>Scopri il Workflow</span>
+              <span>{t.hero.ctaPipeline}</span>
             </a>
           </div>
 
           {/* Quick telemetry indicators below buttons */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto mt-16 pt-8 border-t border-slate-900/60 text-left">
             <div className="p-4 bg-slate-950/40 border border-slate-900 rounded-xl">
-              <span className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Integrità Scientifica</span>
-              <span className="text-xs font-bold text-white block">100% Open Algorithms</span>
+              <span className="text-[10px] uppercase font-bold text-slate-500 block mb-1">{t.hero.grid1_title}</span>
+              <span className="text-xs font-bold text-white block">{t.hero.grid1_val}</span>
             </div>
             <div className="p-4 bg-slate-950/40 border border-slate-900 rounded-xl">
-              <span className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Risoluzione Spaziale</span>
-              <span className="text-xs font-bold text-white block">Calibrazione Metrica 1:1</span>
+              <span className="text-[10px] uppercase font-bold text-slate-500 block mb-1">{t.hero.grid2_title}</span>
+              <span className="text-xs font-bold text-white block">{t.hero.grid2_val}</span>
             </div>
             <div className="p-4 bg-slate-950/40 border border-slate-900 rounded-xl">
-              <span className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Codice Procedura Penale</span>
-              <span className="text-xs font-bold text-white block">Conforme L. 397/2000</span>
+              <span className="text-[10px] uppercase font-bold text-slate-500 block mb-1">{t.hero.grid3_title}</span>
+              <span className="text-xs font-bold text-white block">{t.hero.grid3_val}</span>
             </div>
             <div className="p-4 bg-slate-950/40 border border-slate-900 rounded-xl">
-              <span className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Architettura Sicura</span>
-              <span className="text-xs font-bold text-white block">Elaborazione On-Premise</span>
+              <span className="text-[10px] uppercase font-bold text-slate-500 block mb-1">{t.hero.grid4_title}</span>
+              <span className="text-xs font-bold text-white block">{t.hero.grid4_val}</span>
             </div>
           </div>
 
@@ -245,10 +329,10 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           
           <div className="text-center max-w-3xl mx-auto mb-20">
-            <span className="text-emerald-400 font-mono text-xs uppercase tracking-widest font-bold">Un Nuovo Standard Legale</span>
-            <h2 className="text-3xl font-black text-white mt-2 leading-tight">La rivoluzione digitale nei tribunali</h2>
+            <span className="text-emerald-400 font-mono text-xs uppercase tracking-widest font-bold">{t.vision.badge}</span>
+            <h2 className="text-3xl font-black text-white mt-2 leading-tight">{t.vision.title}</h2>
             <p className="mt-4 text-slate-400 text-sm sm:text-base leading-relaxed">
-              La conservazione e l'analisi della scena del crimine sono passaggi critici e irreversibili. FORA supera la frammentazione delle classiche relazioni periziali cartacee, offrendo una replica spaziale fissa, navigabile e misurabile all'infinito.
+              {t.vision.description}
             </p>
           </div>
 
@@ -259,9 +343,9 @@ export default function App() {
               <div className="h-10 w-10 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-xl flex items-center justify-center mb-6">
                 <Layers className="h-5 w-5" />
               </div>
-              <h3 className="text-lg font-extrabold text-white mb-3 group-hover:text-emerald-400 transition-colors">Da Foto Statiche a Mesh 3D</h3>
+              <h3 className="text-lg font-extrabold text-white mb-3 group-hover:text-emerald-400 transition-colors">{t.vision.feat1_title}</h3>
               <p className="text-slate-400 text-xs sm:text-sm leading-relaxed">
-                Gli algoritmi avanzati estraggono le coordinate spaziali da normali fotografie digitali effettuate con qualsiasi smartphone o fotocamera reflex, riposizionando i pixel in un volume tridimensionale accurato.
+                {t.vision.feat1_desc}
               </p>
             </div>
 
@@ -270,9 +354,9 @@ export default function App() {
               <div className="h-10 w-10 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-xl flex items-center justify-center mb-6">
                 <Cpu className="h-5 w-5" />
               </div>
-              <h3 className="text-lg font-extrabold text-white mb-3 group-hover:text-emerald-400 transition-colors">Precisione Millimetrica 1:1</h3>
+              <h3 className="text-lg font-extrabold text-white mb-3 group-hover:text-emerald-400 transition-colors">{t.vision.feat2_title}</h3>
               <p className="text-slate-400 text-xs sm:text-sm leading-relaxed">
-                Attraverso l'uso di marker metrici sul campo, la scena virtuale viene agganciata a valori spaziali reali. È possibile calcolare distanze reciproche, altezze dei punti d'impatto e volumi dei corpi.
+                {t.vision.feat2_desc}
               </p>
             </div>
 
@@ -281,9 +365,9 @@ export default function App() {
               <div className="h-10 w-10 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-xl flex items-center justify-center mb-6">
                 <Shield className="h-5 w-5" />
               </div>
-              <h3 className="text-lg font-extrabold text-white mb-3 group-hover:text-emerald-400 transition-colors">Ispezione Immersiva AR</h3>
+              <h3 className="text-lg font-extrabold text-white mb-3 group-hover:text-emerald-400 transition-colors">{t.vision.feat3_title}</h3>
               <p className="text-slate-400 text-xs sm:text-sm leading-relaxed">
-                Permette a giudici, pubblici ministeri e avvocati di immergersi direttamente nella scena del crimine proiettandola in AR su un tavolo o navigandola tramite visori VR, valutando le visuali esatte dei testimoni.
+                {t.vision.feat3_desc}
               </p>
             </div>
 
@@ -297,10 +381,10 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           
           <div className="text-center max-w-3xl mx-auto mb-20">
-            <span className="text-emerald-400 font-mono text-xs uppercase tracking-widest font-bold">Integrazione Tecnologica Sinergica</span>
-            <h2 className="text-3xl font-black text-white mt-2">La Catena di Elaborazione Forense</h2>
+            <span className="text-emerald-400 font-mono text-xs uppercase tracking-widest font-bold">{t.pipeline.badge}</span>
+            <h2 className="text-3xl font-black text-white mt-2">{t.pipeline.title}</h2>
             <p className="mt-4 text-slate-400 text-sm">
-              FORA non costringe il perito ad abbandonare gli strumenti scientifici consolidati. Ha integrato e ottimizzato un flusso operativo trasparente per convertire i dati grezzi in prove inoppugnabili.
+              {t.pipeline.description}
             </p>
           </div>
 
@@ -313,16 +397,16 @@ export default function App() {
               </div>
               <div className="mt-4">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-extrabold text-white">Meshroom</h3>
-                  <span className="text-xs font-mono text-slate-500">AliceVision core</span>
+                  <h3 className="text-lg font-extrabold text-white">{t.pipeline.step1_title}</h3>
+                  <span className="text-xs font-mono text-slate-500">{t.pipeline.step1_sub}</span>
                 </div>
                 <p className="text-slate-400 text-xs sm:text-sm leading-relaxed mb-6">
-                  Il software open-source leader per la fotogrammetria. Analizza la correlazione geometrica tra i pixel delle fotorilevazioni aeree o terrestri ed elabora la nuvola di punti della scena (Point Cloud) estraendo le mesh strutturali del terreno e delle pareti (.OBJ, .PLY).
+                  {t.pipeline.step1_desc}
                 </p>
               </div>
               <div className="pt-4 border-t border-slate-900/60 flex items-center space-x-2 text-[11px] font-mono text-slate-500">
                 <Clock className="h-3.5 w-3.5 text-emerald-500 animate-pulse" />
-                <span>Output: Nuvola di Punti 3D Georeferenziata</span>
+                <span>{t.pipeline.step1_out}</span>
               </div>
             </div>
 
@@ -333,16 +417,16 @@ export default function App() {
               </div>
               <div className="mt-4">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-extrabold text-white">Blender</h3>
-                  <span className="text-xs font-mono text-slate-500">Calibrazione Metrica</span>
+                  <h3 className="text-lg font-extrabold text-white">{t.pipeline.step2_title}</h3>
+                  <span className="text-xs font-mono text-slate-500">{t.pipeline.step2_sub}</span>
                 </div>
                 <p className="text-slate-400 text-xs sm:text-sm leading-relaxed mb-6">
-                  Importa le mesh grezze per la rifinitura strutturale. L'operatore identifica i marker metrici posizionati sul campo e imposta il fattore di scala reale 1:1. Rimuove elementi poligonali di disturbo e ottimizza i materiali fotografici (Texture mapping) per un'analisi fluida.
+                  {t.pipeline.step2_desc}
                 </p>
               </div>
               <div className="pt-4 border-t border-slate-900/60 flex items-center space-x-2 text-[11px] font-mono text-slate-500">
                 <Database className="h-3.5 w-3.5 text-emerald-500" />
-                <span>Output: Scena 3D Calibrata Metrico-Sensibile</span>
+                <span>{t.pipeline.step2_out}</span>
               </div>
             </div>
 
@@ -353,16 +437,16 @@ export default function App() {
               </div>
               <div className="mt-4">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-extrabold text-white">Godot Engine</h3>
-                  <span className="text-xs font-mono text-slate-500">FORA Core SDK</span>
+                  <h3 className="text-lg font-extrabold text-white">{t.pipeline.step3_title}</h3>
+                  <span className="text-xs font-mono text-slate-500">{t.pipeline.step3_sub}</span>
                 </div>
                 <p className="text-slate-400 text-xs sm:text-sm leading-relaxed mb-6">
-                  La scena finale viene caricata all'interno del motore di runtime interattivo FORA. In questa fase l'utente può navigare la scena col mouse o in AR, inserire e catalogare i reperti, disegnare traiettorie balistiche ed esportare il report asseverato per la stampa.
+                  {t.pipeline.step3_desc}
                 </p>
               </div>
               <div className="pt-4 border-t border-slate-900/60 flex items-center space-x-2 text-[11px] font-mono text-slate-500">
                 <Smartphone className="h-3.5 w-3.5 text-emerald-500" />
-                <span>Output: Ispezione Interattiva ed Export Report</span>
+                <span>{t.pipeline.step3_out}</span>
               </div>
             </div>
 
@@ -376,10 +460,10 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           
           <div className="text-center max-w-3xl mx-auto mb-16">
-            <span className="text-emerald-400 font-mono text-xs uppercase tracking-widest font-bold">Laboratorio Digitale</span>
-            <h2 className="text-3xl font-black text-white mt-2 leading-tight">Simulatore di Rilievo 3D Forense</h2>
+            <span className="text-emerald-400 font-mono text-xs uppercase tracking-widest font-bold">{t.workspace.badge}</span>
+            <h2 className="text-3xl font-black text-white mt-2 leading-tight">{t.workspace.title}</h2>
             <p className="mt-4 text-slate-400 text-sm">
-              Prova la potenza e l'usabilità di FORA direttamente dal tuo browser. Ruota la telecamera, fai clic sui mobili o sul pavimento per posizionare i marker di reperto numerati, calcola le distanze metriche ed esporta la relazione giudiziaria ufficiale.
+              {t.workspace.description}
             </p>
           </div>
 
@@ -391,6 +475,7 @@ export default function App() {
             setTrajectories={setTrajectories}
             caseInfo={caseInfo}
             setCaseInfo={setCaseInfo}
+            activeLanguage={language}
           />
 
         </div>
@@ -401,10 +486,10 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           
           <div className="text-center max-w-3xl mx-auto mb-16">
-            <span className="text-emerald-400 font-mono text-xs uppercase tracking-widest font-bold">Analisi Comparativa</span>
-            <h2 className="text-3xl font-black text-white mt-2">Perché FORA ridefinisce gli standard</h2>
+            <span className="text-emerald-400 font-mono text-xs uppercase tracking-widest font-bold">{t.table.badge}</span>
+            <h2 className="text-3xl font-black text-white mt-2">{t.table.title}</h2>
             <p className="mt-4 text-slate-400 text-sm">
-              La fragilità dei software proprietari risiede nella natura chiusa (\"black-box\") dei loro calcoli. In sede dibattimentale penale, l'avversario può invalidare una perizia se la ricostruzione software è coperta da segreto industriale. FORA garantisce assoluta trasparenza matematica.
+              {t.table.description}
             </p>
           </div>
 
@@ -413,70 +498,69 @@ export default function App() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-slate-800 bg-slate-900/50">
-                  <th className="p-5 text-xs font-bold uppercase tracking-wider text-slate-300 font-mono">Fattore Tecnico / Legale</th>
-                  <th className="p-5 text-xs font-bold uppercase tracking-wider text-rose-400 font-mono">Software Proprietari Classici</th>
-                  <th className="p-5 text-xs font-bold uppercase tracking-wider text-emerald-400 bg-emerald-500/5 font-mono">Suite FORA (Ingegneria Trasparente)</th>
+                  <th className="p-5 text-xs font-bold uppercase tracking-wider text-slate-300 font-mono">{t.table.col_factor}</th>
+                  <th className="p-5 text-xs font-bold uppercase tracking-wider text-rose-400 font-mono">{t.table.col_prop}</th>
+                  <th className="p-5 text-xs font-bold uppercase tracking-wider text-emerald-400 bg-emerald-500/5 font-mono">{t.table.col_fora}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-900 text-xs sm:text-sm">
                 
                 <tr>
-                  <td className="p-5 font-bold text-white">Admissibilità in Aula (Giudiziaria)</td>
+                  <td className="p-5 font-bold text-white">{t.table.row1_title}</td>
                   <td className="p-5 text-slate-400">
-                    <span className="text-rose-400 font-semibold block mb-1">Debole in Controinterrogatorio</span>
-                    La controparte può contestare l'opacità dei calcoli volumetrici non verificabili o coperti da brevetto.
+                    <span className="text-rose-400 font-semibold block mb-1">{language === 'it' ? 'Debole in Controinterrogatorio' : language === 'es' ? 'Débil en contrainterrogatorios' : 'Weak in cross-examination'}</span>
+                    {t.table.row1_prop}
                   </td>
                   <td className="p-5 text-emerald-300 bg-emerald-500/5 font-semibold">
-                    <span className="text-emerald-400 font-black block mb-1">Inattaccabile dal 2000</span>
-                    Gli algoritmi core sono matematicamente trasparenti, pubblici e riproducibili da qualsiasi consulente tecnico d'ufficio.
+                    <span className="text-emerald-400 font-black block mb-1">{t.table.row1_fora}</span>
+                    {t.table.row1_fora_sub}
                   </td>
                 </tr>
 
                 <tr>
-                  <td className="p-5 font-bold text-white">Costi di Accesso Hardware e Licenze</td>
+                  <td className="p-5 font-bold text-white">{t.table.row2_title}</td>
                   <td className="p-5 text-slate-400">
-                    <span className="text-rose-400 font-semibold block mb-1">Costi Proibitivi (&gt; 15.000€)</span>
-                    Necessita di scanner laser proprietari marchiati e costosi canoni software ricorsivi annuali.
+                    <span className="text-rose-400 font-semibold block mb-1">{language === 'it' ? 'Costi Proibitivi (> 15.000€)' : language === 'es' ? 'Costes prohibitivos (> 15.000€)' : 'Prohibitive costs (> €15,000)'}</span>
+                    {t.table.row2_prop}
                   </td>
                   <td className="p-5 text-emerald-300 bg-emerald-500/5 font-semibold">
-                    <span className="text-emerald-400 font-black block mb-1">Hardware Agnostico</span>
-                    Rilievo eseguibile con comuni fotocamere reflex o smartphone LiDAR. Modello B2B accessibile.
+                    <span className="text-emerald-400 font-black block mb-1">{t.table.row2_fora}</span>
+                    {t.table.row2_fora_sub}
                   </td>
                 </tr>
 
                 <tr>
-                  <td className="p-5 font-bold text-white">Curva di Apprendimento</td>
+                  <td className="p-5 font-bold text-white">{t.table.row3_title}</td>
                   <td className="p-5 text-slate-400">
-                    <span className="text-rose-400 font-semibold block mb-1">Complessa e Specialistica</span>
-                    Richiede settimane di corsi per padroneggiare nuvole di punti in CAD industriali complessi.
+                    <span className="text-rose-400 font-semibold block mb-1">{language === 'it' ? 'Complessa e Specialistica' : language === 'es' ? 'Compleja y muy especializada' : 'Complex and highly specialized'}</span>
+                    {t.table.row3_prop}
                   </td>
                   <td className="p-5 text-emerald-300 bg-emerald-500/5 font-semibold">
-                    <span className="text-emerald-400 font-black block mb-1">Interfaccia Point &amp; Click</span>
-                    L'ispezione della scena si controlla con movimenti mouse intuitivi e menu forensi guidati.
+                    <span className="text-emerald-400 font-black block mb-1">{t.table.row3_fora}</span>
+                    {t.table.row3_fora_sub}
                   </td>
                 </tr>
 
                 <tr>
-                  <td className="p-5 font-bold text-white">Portabilità e Condivisione (AR/Web)</td>
+                  <td className="p-5 font-bold text-white">{t.table.row4_title}</td>
                   <td className="p-5 text-slate-400">
-                    <span className="text-rose-400 font-semibold block mb-1">Scarsa ed Estremamente Pesante</span>
-                    I file sono pesanti e visualizzabili solo su workstation fisse con software proprietari dedicati installati.
+                    <span className="text-rose-400 font-semibold block mb-1">{language === 'it' ? 'Scarsa ed Estremamente Pesante' : language === 'es' ? 'Baja portabilidad' : 'Poor and extremely heavy files'}</span>
+                    {t.table.row4_prop}
                   </td>
                   <td className="p-5 text-emerald-300 bg-emerald-500/5 font-semibold">
-                    <span className="text-emerald-400 font-black block mb-1">Web-Nativa e Realtà Aumentata</span>
-                    Condivisione istantanea protetta tramite link web o visore AR portatile direttamente sul tavolo dell'aula.
+                    <span className="text-emerald-400 font-black block mb-1">{t.table.row4_fora}</span>
+                    {t.table.row4_fora_sub}
                   </td>
                 </tr>
 
                 <tr>
-                  <td className="p-5 font-bold text-white">Trattamento Dati Giudiziari</td>
+                  <td className="p-5 font-bold text-white">{t.table.row5_title}</td>
                   <td className="p-5 text-slate-400">
-                    <span className="text-rose-400 font-semibold block">Dipendente da Cloud</span>
-                    Molti sistemi caricano le fotorilevazioni su server esteri ignoti per l'elaborazione fotogrammetrica.
+                    <span className="text-rose-400 font-semibold block mb-1">{language === 'it' ? 'Dipendente da Cloud' : language === 'es' ? 'Dependiente de la nube' : 'Cloud dependent'}</span>
+                    {t.table.row5_prop}
                   </td>
                   <td className="p-5 text-emerald-300 bg-emerald-500/5 font-semibold">
-                    <span className="text-emerald-400 font-black block">100% On-Premise</span>
-                    Tutti i dati e le immagini sensibili restano confinati sulle macchine locali degli investigatori per massima riservatezza.
+                    {t.table.row5_fora}
                   </td>
                 </tr>
 
@@ -492,15 +576,15 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           
           <div className="text-center max-w-3xl mx-auto mb-20">
-            <span className="text-emerald-400 font-mono text-xs uppercase tracking-widest font-bold">Q&amp;A Forense</span>
-            <h2 className="text-3xl font-black text-white mt-2">Domande Frequenti</h2>
+            <span className="text-emerald-400 font-mono text-xs uppercase tracking-widest font-bold">{t.faqSection.badge}</span>
+            <h2 className="text-3xl font-black text-white mt-2">{t.faqSection.title}</h2>
             <p className="mt-4 text-slate-400 text-sm">
-              Tutte le risposte legali e metodologiche relative all'uso di FORA nelle aule giudiziarie italiane.
+              {t.faqSection.description}
             </p>
           </div>
 
           <div className="max-w-4xl mx-auto space-y-4">
-            {faqs.map((faq, idx) => {
+            {t.faqSection.questions.map((faq, idx) => {
               const isOpen = activeFaq === idx;
               return (
                 <div 
@@ -509,7 +593,7 @@ export default function App() {
                 >
                   <button
                     onClick={() => setActiveFaq(isOpen ? null : idx)}
-                    className="w-full p-6 text-left flex justify-between items-center space-x-4 focus:outline-none"
+                    className="w-full p-6 text-left flex justify-between items-center space-x-4 focus:outline-none cursor-pointer"
                   >
                     <span className="font-bold text-white text-sm sm:text-base">{faq.q}</span>
                     <span className="shrink-0 p-1 bg-slate-950 border border-slate-800 rounded-lg text-slate-400">
@@ -540,20 +624,20 @@ export default function App() {
             
             {/* Context/Brand Info column */}
             <div className="space-y-6">
-              <span className="text-emerald-400 font-mono text-xs uppercase tracking-widest font-bold">Unisciti all'Innovazione Scientifica</span>
-              <h2 className="text-3xl font-black text-white leading-tight">Richiedi una licenza di test o una demo per la tua Procura</h2>
+              <span className="text-emerald-400 font-mono text-xs uppercase tracking-widest font-bold">{t.contact.badge}</span>
+              <h2 className="text-3xl font-black text-white leading-tight">{t.contact.title}</h2>
               <p className="text-slate-400 text-sm sm:text-base leading-relaxed">
-                FORA collabora regolarmente con periti iscritti all'albo, studi legali di indagini difensive e uffici giudiziari su tutto il territorio nazionale. Contattaci oggi per ottenere l'accesso completo alla suite desktop On-Premise, materiale informativo dettagliato e supporto nella prima calibrazione 1:1.
+                {t.contact.description}
               </p>
               
               <div className="space-y-4 pt-4 border-t border-slate-900">
                 <div className="flex items-center space-x-3 text-xs text-slate-400">
                   <MapPin className="h-4 w-4 text-emerald-500" />
-                  <span>Divisione Forense • Sezione R&D • Roma, Italia</span>
+                  <span>{t.contact.info_title}</span>
                 </div>
                 <div className="flex items-center space-x-3 text-xs text-slate-400">
                   <Mail className="h-4 w-4 text-emerald-500" />
-                  <span>supporto@fora-forensics.it</span>
+                  <span>{t.contact.info_email}</span>
                 </div>
               </div>
             </div>
@@ -565,9 +649,9 @@ export default function App() {
                   <div className="h-16 w-16 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-6">
                     <CheckCircle className="h-8 w-8 text-emerald-400 animate-bounce" />
                   </div>
-                  <h3 className="text-lg font-bold text-white uppercase tracking-wider">Richiesta Ricevuta con Successo</h3>
+                  <h3 className="text-lg font-bold text-white uppercase tracking-wider">{t.contact.form_success_title}</h3>
                   <p className="text-slate-400 text-xs sm:text-sm max-w-sm mx-auto leading-relaxed">
-                    Grazie per l'interesse. Il nostro ufficio d'Ingegneria Forense ha registrato i tuoi dati e ti contatterà all'indirizzo <strong className="text-white">{formFields.email}</strong> entro 24 ore lavorative.
+                    {t.contact.form_success_desc} <strong className="text-white">{formFields.email}</strong>
                   </p>
                   <button 
                     onClick={() => {
@@ -576,18 +660,18 @@ export default function App() {
                     }}
                     className="mt-6 text-xs text-emerald-400 hover:text-emerald-300 font-bold underline cursor-pointer"
                   >
-                    Invia un'altra richiesta
+                    {t.contact.form_success_btn}
                   </button>
                 </div>
               ) : (
                 <form onSubmit={handleFormSubmit} className="space-y-4">
                   <h3 className="text-base font-bold text-white uppercase tracking-wider font-mono flex items-center space-x-2 mb-2">
                     <Scale className="h-4.5 w-4.5 text-emerald-500" />
-                    <span>Modulo Contatto Ufficiale</span>
+                    <span>{t.contact.form_title}</span>
                   </h3>
                   
                   <div>
-                    <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Nome e Cognome *</label>
+                    <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">{t.contact.label_name}</label>
                     <div className="relative">
                       <User className="absolute left-3.5 top-3 h-4 w-4 text-slate-500" />
                       <input 
@@ -596,14 +680,14 @@ export default function App() {
                         value={formFields.name}
                         onChange={e => setFormFields(prev => ({ ...prev, name: e.target.value }))}
                         className="w-full bg-slate-900 border border-slate-800 focus:border-emerald-500 focus:outline-none rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-300"
-                        placeholder="Dott. Ing. Marco Rossi"
+                        placeholder={t.contact.placeholder_name}
                       />
                     </div>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Email Istituzionale *</label>
+                      <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">{t.contact.label_email}</label>
                       <div className="relative">
                         <Mail className="absolute left-3.5 top-3 h-4 w-4 text-slate-500" />
                         <input 
@@ -612,12 +696,12 @@ export default function App() {
                           value={formFields.email}
                           onChange={e => setFormFields(prev => ({ ...prev, email: e.target.value }))}
                           className="w-full bg-slate-900 border border-slate-800 focus:border-emerald-500 focus:outline-none rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-300"
-                          placeholder="m.rossi@periti-tribunale.it"
+                          placeholder={t.contact.placeholder_email}
                         />
                       </div>
                     </div>
                     <div>
-                      <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Telefono</label>
+                      <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">{t.contact.label_phone}</label>
                       <div className="relative">
                         <Phone className="absolute left-3.5 top-3 h-4 w-4 text-slate-500" />
                         <input 
@@ -625,14 +709,14 @@ export default function App() {
                           value={formFields.phone}
                           onChange={e => setFormFields(prev => ({ ...prev, phone: e.target.value }))}
                           className="w-full bg-slate-900 border border-slate-800 focus:border-emerald-500 focus:outline-none rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-300"
-                          placeholder="+39 333 1234567"
+                          placeholder={t.contact.placeholder_phone}
                         />
                       </div>
                     </div>
                   </div>
 
                   <div>
-                    <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Ordine / Procura / Ente di Appartenenza</label>
+                    <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">{t.contact.label_agency}</label>
                     <div className="relative">
                       <Building className="absolute left-3.5 top-3 h-4 w-4 text-slate-500" />
                       <input 
@@ -640,13 +724,13 @@ export default function App() {
                         value={formFields.agency}
                         onChange={e => setFormFields(prev => ({ ...prev, agency: e.target.value }))}
                         className="w-full bg-slate-900 border border-slate-800 focus:border-emerald-500 focus:outline-none rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-300"
-                        placeholder="Albo Periti Tribunale di Roma"
+                        placeholder={t.contact.placeholder_agency}
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Descrizione Esigenze perizie</label>
+                    <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">{t.contact.label_message}</label>
                     <div className="relative">
                       <MessageSquare className="absolute left-3.5 top-3 h-4 w-4 text-slate-500" />
                       <textarea 
@@ -654,16 +738,16 @@ export default function App() {
                         value={formFields.message}
                         onChange={e => setFormFields(prev => ({ ...prev, message: e.target.value }))}
                         className="w-full bg-slate-900 border border-slate-800 focus:border-emerald-500 focus:outline-none rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-300"
-                        placeholder="Inserisci dettagli utili, es. analisi balistiche d'indagine difensiva, acquisizione LiDAR..."
+                        placeholder={t.contact.placeholder_message}
                       />
                     </div>
                   </div>
 
                   <button 
                     type="submit"
-                    className="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 py-3 rounded-xl text-xs font-bold uppercase tracking-wider transition-all shadow-lg shadow-emerald-500/20"
+                    className="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 py-3 rounded-xl text-xs font-bold uppercase tracking-wider transition-all shadow-lg shadow-emerald-500/20 cursor-pointer"
                   >
-                    Invia Richiesta di Licenza Demo
+                    {t.contact.btn_submit}
                   </button>
                 </form>
               )}
@@ -690,20 +774,170 @@ export default function App() {
             </div>
             
             <div className="flex space-x-6 text-xs text-slate-400 uppercase tracking-wider font-bold">
-              <a href="#vision" className="hover:text-emerald-400 transition-colors">Visione</a>
-              <a href="#pipeline" className="hover:text-emerald-400 transition-colors">La Pipeline</a>
-              <a href="#demo" className="hover:text-emerald-400 transition-colors">Laboratorio 3D</a>
-              <a href="#market" className="hover:text-emerald-400 transition-colors">Vantaggi</a>
+              <a href="#vision" className="hover:text-emerald-400 transition-colors">{t.nav.vision}</a>
+              <a href="#pipeline" className="hover:text-emerald-400 transition-colors">{t.nav.pipeline}</a>
+              <a href="#demo" className="hover:text-emerald-400 transition-colors">{t.nav.demo}</a>
+              <a href="#market" className="hover:text-emerald-400 transition-colors">{t.nav.market}</a>
             </div>
           </div>
 
           <div className="flex flex-col sm:flex-row justify-between items-center text-[11px] text-slate-500 font-mono">
-            <p>&copy; 2026 FORA System Inc. Tutti i diritti riservati. Soluzione Enterprise per la Ricostruzione Forense.</p>
-            <p className="mt-2 sm:mt-0">Sviluppato in Italia con rigore scientifico e trasparenza tecnologica.</p>
+            <p>&copy; 2026 FORA System Inc. {language === 'it' ? 'Tutti i diritti riservati. Soluzione Enterprise per la Ricostruzione Forense.' : language === 'es' ? 'Todos los derechos reservados. Solución Enterprise para la Reconstrucción Forense.' : 'All rights reserved. Enterprise Solution for Forensic Reconstruction.'}</p>
+            <p className="mt-2 sm:mt-0">{language === 'it' ? 'Sviluppato in Italia con rigore scientifico e trasparenza tecnologica.' : language === 'es' ? 'Desarrollado en Italia con rigor científico y transparencia tecnológica.' : 'Developed in Italy with scientific rigor and technological transparency.'}</p>
           </div>
 
         </div>
       </footer>
+
+      {/* ======================================================= */}
+      {/* 10. FLOATING AI FORENSIC ASSISTANT CHAT PANEL */}
+      {/* ======================================================= */}
+      
+      {/* Chat toggle FAB */}
+      <button 
+        onClick={() => setChatOpen(!chatOpen)}
+        className="fixed bottom-6 right-6 z-50 bg-emerald-500 text-slate-950 hover:bg-emerald-400 p-4 rounded-full shadow-2xl transition-all duration-300 hover:scale-110 flex items-center justify-center border border-emerald-300/30 cursor-pointer"
+        title="Apri Assistente AI Forense"
+      >
+        {chatOpen ? <X className="h-6 w-6" /> : (
+          <div className="relative">
+            <MessageSquare className="h-6 w-6" />
+            <span className="absolute -top-1 -right-1 flex h-3 w-3">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-300 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-teal-300"></span>
+            </span>
+          </div>
+        )}
+      </button>
+
+      {/* Floating Chat Drawer/Card */}
+      {chatOpen && (
+        <div className="fixed bottom-24 right-6 w-[400px] max-w-[calc(100vw-2rem)] h-[580px] max-h-[80vh] bg-slate-950/95 border border-slate-800 rounded-3xl shadow-2xl z-50 flex flex-col overflow-hidden backdrop-blur-md animate-fade-in-up">
+          
+          {/* Drawer Header */}
+          <div className="p-4 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
+            <div className="flex items-center space-x-2.5">
+              <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 p-1.5 rounded-lg">
+                <Sparkles className="h-4 w-4" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-white flex items-center">
+                  {t.chat.title}
+                  <span className="h-2 w-2 rounded-full bg-emerald-500 ml-2 animate-pulse" />
+                </h4>
+                <p className="text-[10px] text-slate-400 font-mono tracking-wide">{t.chat.subtitle}</p>
+              </div>
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <span className="text-[8px] bg-slate-800 text-emerald-400 border border-slate-700 px-1.5 py-0.5 rounded font-bold font-mono tracking-tighter">
+                {t.chat.context_badge}
+              </span>
+              <button 
+                onClick={() => setChatMessages([])} 
+                className="p-1 text-slate-500 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                title="Cancella conversazione"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Messages Body */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {chatMessages.length === 0 ? (
+              <div className="h-full flex flex-col justify-center space-y-4 py-4 text-center">
+                <div className="h-12 w-12 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto">
+                  <Shield className="h-6 w-6" />
+                </div>
+                <p className="text-xs text-slate-300 max-w-[280px] mx-auto leading-relaxed whitespace-pre-line">
+                  {t.chat.empty_messages}
+                </p>
+                
+                {/* Rapid-fire Questions chips */}
+                <div className="space-y-2 pt-2 text-left max-w-[340px] mx-auto">
+                  {suggestedQuestions[language].map((q, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => handleSendChatMessage(q)}
+                      className="w-full text-left bg-slate-900 hover:bg-slate-850 hover:border-emerald-500/30 text-slate-400 hover:text-emerald-300 border border-slate-800 rounded-xl p-2.5 text-[11px] leading-snug transition-all cursor-pointer"
+                    >
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <>
+                {chatMessages.map((msg, idx) => (
+                  <div 
+                    key={idx} 
+                    className={`flex items-start space-x-2.5 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                  >
+                    {msg.role !== 'user' && (
+                      <div className="bg-emerald-500 text-slate-950 p-1.5 rounded-lg shrink-0 mt-0.5 shadow shadow-emerald-500/10">
+                        <Shield className="h-3.5 w-3.5" />
+                      </div>
+                    )}
+                    <div className={`p-3 rounded-2xl text-xs max-w-[80%] leading-relaxed ${
+                      msg.role === 'user' 
+                        ? 'bg-emerald-500 text-slate-950 font-semibold rounded-tr-none' 
+                        : 'bg-slate-900 text-slate-200 border border-slate-850 rounded-tl-none whitespace-pre-line'
+                    }`}>
+                      {msg.content}
+                    </div>
+                    {msg.role === 'user' && (
+                      <div className="bg-slate-800 text-slate-300 p-1.5 rounded-lg shrink-0 mt-0.5 shadow">
+                        <User className="h-3.5 w-3.5" />
+                      </div>
+                    )}
+                  </div>
+                ))}
+                
+                {chatLoading && (
+                  <div className="flex items-start space-x-2.5 justify-start">
+                    <div className="bg-emerald-500 text-slate-950 p-1.5 rounded-lg shrink-0 mt-0.5">
+                      <Shield className="h-3.5 w-3.5 animate-pulse" />
+                    </div>
+                    <div className="bg-slate-900 border border-slate-850 p-3 rounded-2xl rounded-tl-none text-xs text-slate-400 italic">
+                      {t.chat.typing}
+                      <span className="inline-flex space-x-1 ml-2">
+                        <span className="h-1.5 w-1.5 bg-emerald-400 rounded-full animate-bounce delay-100"></span>
+                        <span className="h-1.5 w-1.5 bg-emerald-400 rounded-full animate-bounce delay-200"></span>
+                        <span className="h-1.5 w-1.5 bg-emerald-400 rounded-full animate-bounce delay-300"></span>
+                      </span>
+                    </div>
+                  </div>
+                )}
+                <div ref={chatBottomRef} />
+              </>
+            )}
+          </div>
+
+          {/* Form Input Area */}
+          <form 
+            onSubmit={(e) => { e.preventDefault(); handleSendChatMessage(); }}
+            className="p-3 bg-slate-900 border-t border-slate-850 flex items-center space-x-2"
+          >
+            <input 
+              type="text"
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              placeholder={t.chat.placeholder}
+              disabled={chatLoading}
+              className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+            />
+            <button 
+              type="submit"
+              disabled={!chatInput.trim() || chatLoading}
+              className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 p-2.5 rounded-xl transition-all shadow-md shadow-emerald-500/10 hover:scale-105 disabled:opacity-50 disabled:scale-100 cursor-pointer flex items-center justify-center shrink-0"
+            >
+              <Send className="h-3.5 w-3.5" />
+            </button>
+          </form>
+
+        </div>
+      )}
 
     </div>
   );

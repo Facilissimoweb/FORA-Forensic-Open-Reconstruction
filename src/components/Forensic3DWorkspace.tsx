@@ -24,6 +24,7 @@ import {
   Maximize2
 } from 'lucide-react';
 import { EvidenceMarker, Trajectory } from '../types';
+import { translations, Language } from '../translations';
 
 interface Forensic3DWorkspaceProps {
   markers: EvidenceMarker[];
@@ -46,6 +47,7 @@ interface Forensic3DWorkspaceProps {
     operator: string;
     description: string;
   }>>;
+  activeLanguage?: Language;
 }
 
 export default function Forensic3DWorkspace({
@@ -54,8 +56,12 @@ export default function Forensic3DWorkspace({
   trajectories,
   setTrajectories,
   caseInfo,
-  setCaseInfo
+  setCaseInfo,
+  activeLanguage = 'it'
 }: Forensic3DWorkspaceProps) {
+  const lang = activeLanguage;
+  const t = translations[lang];
+  
   const mountRef = useRef<HTMLDivElement>(null);
   
   // Three.js instances refs
@@ -602,18 +608,23 @@ export default function Forensic3DWorkspace({
         const nextId = markers.length > 0 ? Math.max(...markers.map(m => m.id)) + 1 : 1;
         const tagName = selectedTag;
         
+        const markerBaseName = lang === 'it' ? 'Reperto' : lang === 'es' ? 'Testigo' : 'Marker';
         const newMarker: EvidenceMarker = {
           id: nextId,
-          name: `Reperto #${String(nextId).padStart(2, '0')}`,
+          name: `${markerBaseName} #${String(nextId).padStart(2, '0')}`,
           x: parseFloat(point.x.toFixed(3)),
           y: parseFloat(point.y.toFixed(3)),
           z: parseFloat(point.z.toFixed(3)),
           tag: tagName,
-          description: `Rilevamento spaziale di tipo ${tagName}.`
+          description: lang === 'it' 
+            ? `Rilevamento spaziale di tipo ${tagName}.` 
+            : lang === 'es'
+            ? `Detección espacial de tipo ${tagName}.`
+            : `Spatial detection of type ${tagName}.`
         };
 
         setMarkers(prev => [...prev, newMarker]);
-        showNotification(`Inserito ${newMarker.name} alla quota Y: ${newMarker.y.toFixed(2)}m`, 'success');
+        showNotification(t.workspace.toast_marker_inserted.replace('{name}', newMarker.name).replace('{y}', newMarker.y.toFixed(2)), 'success');
       }
     }
   };
@@ -625,7 +636,7 @@ export default function Forensic3DWorkspace({
       laserScannerRef.current.visible = !isLaserOn;
       laserScannerRef.current.position.y = 0;
     }
-    showNotification(isLaserOn ? "Scanner laser spento" : "Scanner laser calibrato e attivo", "info");
+    showNotification(isLaserOn ? t.workspace.toast_scanner_off : t.workspace.toast_scanner_on, "info");
   };
 
   // Generate Bullet Trajectory
@@ -665,7 +676,7 @@ export default function Forensic3DWorkspace({
     };
 
     setTrajectories(prev => [...prev, newTrajectory]);
-    showNotification(`Calcolo balistico completato: Angolo ${elevation}°`, 'success');
+    showNotification(t.workspace.toast_traj_generated.replace('{elevation}', String(elevation)), 'success');
   };
 
   // Calculate measurement between two markers
@@ -717,7 +728,7 @@ export default function Forensic3DWorkspace({
     const file = event.target.files?.[0];
     if (!file) return;
 
-    setLoadingText("Mappatura dell'immagine sul piano...");
+    setLoadingText(lang === 'it' ? "Mappatura dell'immagine sul piano..." : lang === 'es' ? "Mapeando imagen en el plano..." : "Mapping image onto plane...");
     const reader = new FileReader();
     reader.onload = (e) => {
       const imgData = e.target?.result as string;
@@ -730,11 +741,11 @@ export default function Forensic3DWorkspace({
           material.map = texture;
           material.needsUpdate = true;
           setLoadingText("");
-          showNotification("Immagine di rilievo applicata con successo alla planimetria 3D!", "success");
+          showNotification(lang === 'it' ? "Immagine di rilievo applicata con successo alla planimetria 3D!" : lang === 'es' ? "¡Imagen de relieve aplicada con éxito a la planimetría 3D!" : "Relief image applied successfully to the 3D floorplan!", "success");
         }
       }, undefined, () => {
         setLoadingText("");
-        showNotification("Errore nel caricamento della texture.", "error");
+        showNotification(lang === 'it' ? "Errore nel caricamento della texture." : lang === 'es' ? "Error al cargar la textura." : "Error loading texture.", "error");
       });
     };
     reader.readAsDataURL(file);
@@ -746,7 +757,7 @@ export default function Forensic3DWorkspace({
     if (!file) return;
 
     const extension = file.name.split('.').pop()?.toLowerCase();
-    setLoadingText("Elaborazione e parsing della mesh tridimensionale...");
+    setLoadingText(lang === 'it' ? "Elaborazione e parsing della mesh tridimensionale..." : lang === 'es' ? "Procesando y analizando la malla tridimensional..." : "Processing and parsing 3D mesh...");
 
     const reader = new FileReader();
 
@@ -760,7 +771,7 @@ export default function Forensic3DWorkspace({
         }, (err) => {
           console.error(err);
           setLoadingText("");
-          showNotification("Errore nel parsing del modello GLB/GLTF.", "error");
+          showNotification(lang === 'it' ? "Errore nel parsing del modello GLB/GLTF." : lang === 'es' ? "Error al analizar el modelo GLB/GLTF." : "Error parsing GLB/GLTF model.", "error");
         });
       };
     } else if (extension === 'obj') {
@@ -774,12 +785,12 @@ export default function Forensic3DWorkspace({
         } catch (err) {
           console.error(err);
           setLoadingText("");
-          showNotification("Errore nel caricamento del file OBJ.", "error");
+          showNotification(lang === 'it' ? "Errore nel caricamento del file OBJ." : lang === 'es' ? "Error al cargar el archivo OBJ." : "Error loading OBJ file.", "error");
         }
       };
     } else {
       setLoadingText("");
-      showNotification("Formato file non supportato. Utilizzare .obj, .gltf o .glb", "error");
+      showNotification(lang === 'it' ? "Formato file non supportato. Utilizzare .obj, .gltf o .glb" : lang === 'es' ? "Formato de archivo no soportado. Utilice .obj, .gltf o .glb" : "Unsupported file format. Please use .obj, .gltf, or .glb", "error");
     }
   };
 
@@ -829,7 +840,7 @@ export default function Forensic3DWorkspace({
     scene.add(model);
 
     setLoadingText("");
-    showNotification("Nuova mesh fotogrammetrica 3D importata con successo!", "success");
+    showNotification(lang === 'it' ? "Nuova mesh fotogrammetrica 3D importata con successo!" : lang === 'es' ? "¡Nueva malla fotogramétrica 3D importada con éxito!" : "New photogrammetric 3D mesh imported successfully!", "success");
   };
 
   // Reset entire scene
@@ -861,13 +872,13 @@ export default function Forensic3DWorkspace({
         measurementLineRef.current = null;
       }
     }
-    showNotification("Simulatore resettato allo stato di default", "info");
+    showNotification(t.workspace.toast_reset, "info");
   };
 
   // Export Case File as JSON Telemetry
   const exportCaseAsJSON = () => {
     if (markers.length === 0 && trajectories.length === 0) {
-      showNotification("Dossier vuoto. Inserisci reperti prima di esportare.", "error");
+      showNotification(t.workspace.toast_empty_dossier, "error");
       return;
     }
 
@@ -887,22 +898,62 @@ export default function Forensic3DWorkspace({
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
-    showNotification("Dati telemetrici JSON esportati con successo!", "success");
+    showNotification(t.workspace.toast_json_success, "success");
   };
 
   // Export Courthouse Forensic Report HTML
   const exportCourthouseReport = () => {
     if (markers.length === 0) {
-      showNotification("Registra almeno un reperto prima di generare il report.", "error");
+      showNotification(t.workspace.toast_report_empty, "error");
       return;
     }
 
+    const reportTitle = lang === 'it' ? "FORA - Relazione Tecnica d'Indagine Forense" : lang === 'es' ? "FORA - Informe Técnico de Investigación Forense" : "FORA - Digital Forensic Investigation Report";
+    const reportHeader = lang === 'it' ? "Dossier di Ricostruzione Forense Spaziale" : lang === 'es' ? "Expediente de Reconstrucción Forense Espacial" : "Spatial Forensic Reconstruction File";
+    const labelCase = lang === 'it' ? "REGISTRO PROCEDIMENTO CASO" : lang === 'es' ? "REGISTRO DE EXPEDIENTE" : "CASE REGISTRATION FILE";
+    const labelDate = lang === 'it' ? "DATA ACQUISIZIONE" : lang === 'es' ? "FECHA DE ADQUISICIÓN" : "ACQUISITION DATE";
+    const labelTitle = lang === 'it' ? "DENOMINAZIONE CASO" : lang === 'es' ? "TÍTULO DE LA CAUSA" : "CASE TITLE";
+    const labelLoc = lang === 'it' ? "LOCALITÀ SCENA" : lang === 'es' ? "UBICACIÓN DE LA ESCENA" : "SCENE LOCATION";
+    const labelOp = lang === 'it' ? "OPERATORE RESPONSABILE" : lang === 'es' ? "PERITO RESPONSABLE" : "RESPONSIBLE OPERATOR";
+    const labelVal = lang === 'it' ? "STATO DI VALIDAZIONE" : lang === 'es' ? "ESTADO DE VALIDACIÓN" : "VALIDATION STATE";
+    const valState = lang === 'it' ? "CALIBRATO - SCALA REALE 1:1" : lang === 'es' ? "CALIBRADO - ESCALA REAL 1:1" : "CALIBRATED - REAL SCALE 1:1";
+    
+    const sectionDesc = lang === 'it' ? "Descrizione Generale del Caso" : lang === 'es' ? "Descripción General del Caso" : "General Case Description";
+    const noDesc = lang === 'it' ? "Nessuna descrizione specificata nel dossier digitale." : lang === 'es' ? "No se ha especificado descripción en el expediente digital." : "No description specified in the digital file.";
+    
+    const sectionMarkers = lang === 'it' ? "Dossier Metrico Reperti Georeferenziati" : lang === 'es' ? "Dossier de Evidencias Georreferenciadas" : "Georeferenced Evidence File";
+    const colID = "ID";
+    const colTag = lang === 'it' ? "Categoria Reperto" : lang === 'es' ? "Categoría de Evidencia" : "Evidence Category";
+    const colX = lang === 'it' ? "Ascissa X (m)" : lang === 'es' ? "Coordenada X (m)" : "Abscissa X (m)";
+    const colY = lang === 'it' ? "Ordinata Y (m)" : lang === 'es' ? "Coordenada Y (m)" : "Ordinate Y (m)";
+    const colZ = lang === 'it' ? "Quota Z (m)" : lang === 'es' ? "Coordenada Z (m)" : "Altitude Z (m)";
+    const colDesc = lang === 'it' ? "Descrizione Verbale sul Campo" : lang === 'es' ? "Descripción Verbal de Campo" : "Field Verbal Description";
+
+    const sectionTraj = lang === 'it' ? "Rilievo Traiettorie Balistiche e Vettori" : lang === 'es' ? "Simulación de Trayectorias Balísticas" : "Ballistic Trajectory & Vector Surveys";
+    const colTrjID = lang === 'it' ? "Vettore ID" : lang === 'es' ? "Vector ID" : "Vector ID";
+    const colOrigin = lang === 'it' ? "Origine XYZ (m)" : lang === 'es' ? "Origen XYZ (m)" : "Origin XYZ (m)";
+    const colImpact = lang === 'it' ? "Impatto XYZ (m)" : lang === 'es' ? "Impacto XYZ (m)" : "Impact XYZ (m)";
+    const colAz = "Azimuth (°)";
+    const colEl = lang === 'it' ? "Elevazione (°)" : lang === 'es' ? "Elevación (°)" : "Elevation (°)";
+    const colConf = lang === 'it' ? "Indice Attendibilità" : lang === 'es' ? "Índice de Fiabilidad" : "Confidence Rating";
+
+    const sectionCert = lang === 'it' ? "Clausola di Certificazione Scientifica" : lang === 'es' ? "Cláusula de Certificación Científica" : "Scientific Certification Clause";
+    const certText = lang === 'it' 
+      ? "Le misurazioni spaziali tridimensionali e i vettori balistici registrati in questo verbale sono stati elaborati mediante l'ecosistema digitale FORA. Il core applicativo adotta l'ingegneria del software open-source per la fotogrammetria e il rendering grafico real-time (motori Meshroom, Blender e Godot). Ai sensi della Legge 397/2000 sulle Indagini Difensive nel codice di procedura penale italiano, le formule geometriche utilizzate sono pubbliche, riproducibili, verificabili dalle parti ed esenti da vincoli o alterazioni di sistemi a scatola chiusa proprietari."
+      : lang === 'es'
+      ? "Las mediciones espaciales tridimensionales y los vectores balísticos registrados en este informe fueron procesados mediante el ecosistema digital FORA. El núcleo aplicativo adopta software de código abierto para la fotogrametría y renderizado en tiempo real (motores Meshroom, Blender y Godot). Conforme a las normativas de investigaciones defensivas y códigos de procedimiento penal internacionales, las fórmulas geométricas utilizadas son públicas, reproducibles y verificables por cualquier parte, garantizando plena transparencia científica."
+      : "The three-dimensional spatial measurements and ballistic vectors recorded in this report were processed using the FORA digital ecosystem. The application core adopts open-source software engineering for photogrammetry and real-time graphic rendering (Meshroom, Blender, and Godot engines). In accordance with digital forensics and defensive investigation standards, all geometric formulas utilized are public, fully reproducible, and verifiable by any party, ensuring total scientific transparency and avoiding closed-source proprietary blockages.";
+
+    const labelPlaceDate = lang === 'it' ? "Luogo e Data" : lang === 'es' ? "Lugar y Fecha" : "Place and Date";
+    const labelSignature = lang === 'it' ? "Firma dell'Operatore Forense" : lang === 'es' ? "Firma del Perito Forense" : "Forensic Operator Signature";
+    const labelExpertTitle = lang === 'it' ? "Perito Responsabile" : lang === 'es' ? "Perito Responsable" : "Responsible Expert Witness";
+
     const reportHtml = `
       <!DOCTYPE html>
-      <html lang="it">
+      <html lang="${lang}">
       <head>
         <meta charset="UTF-8">
-        <title>FORA - Relazione Tecnica d'Indagine Forense</title>
+        <title>${reportTitle}</title>
         <style>
           body { font-family: 'Courier New', Courier, monospace; color: #0f172a; padding: 50px; background-color: #ffffff; line-height: 1.5; }
           .header { border-bottom: 3px double #000; padding-bottom: 20px; margin-bottom: 30px; text-align: center; }
@@ -925,34 +976,34 @@ export default function Forensic3DWorkspace({
       </head>
       <body>
         <div class="header">
-          <div class="title">Dossier di Ricostruzione Forense Spaziale</div>
+          <div class="title">${reportHeader}</div>
           <div class="subtitle">FORA - Forensic Open Reconstruction & Analysis System</div>
         </div>
 
         <div class="meta-grid">
-          <div class="meta-item"><strong>REGISTRO PROCEDIMENTO CASO:</strong> # ${caseInfo.id || "N/D"}</div>
-          <div class="meta-item"><strong>DATA ACQUISIZIONE:</strong> ${caseInfo.date || "N/D"}</div>
-          <div class="meta-item"><strong>DENOMINAZIONE CASO:</strong> ${caseInfo.title || "N/D"}</div>
-          <div class="meta-item"><strong>LOCALITÀ SCENA:</strong> ${caseInfo.location || "N/D"}</div>
-          <div class="meta-item"><strong>OPERATORE RESPONSABILE:</strong> ${caseInfo.operator || "N/D"}</div>
-          <div class="meta-item"><strong>STATO DI VALIDAZIONE:</strong> CALIBRATO - SCALA REALE 1:1</div>
+          <div class="meta-item"><strong>${labelCase}:</strong> # ${caseInfo.id || "N/D"}</div>
+          <div class="meta-item"><strong>${labelDate}:</strong> ${caseInfo.date || "N/D"}</div>
+          <div class="meta-item"><strong>${labelTitle}:</strong> ${caseInfo.title || "N/D"}</div>
+          <div class="meta-item"><strong>${labelLoc}:</strong> ${caseInfo.location || "N/D"}</div>
+          <div class="meta-item"><strong>${labelOp}:</strong> ${caseInfo.operator || "N/D"}</div>
+          <div class="meta-item"><strong>${labelVal}:</strong> ${valState}</div>
         </div>
 
-        <div class="section-title">Descrizione Generale del Caso</div>
+        <div class="section-title">${sectionDesc}</div>
         <p style="font-size: 12px; text-align: justify; margin-bottom: 35px;">
-          ${caseInfo.description || "Nessuna descrizione specificata nel dossier digitale."}
+          ${caseInfo.description || noDesc}
         </p>
 
-        <div class="section-title">Dossier Metrico Reperti Georeferenziati</div>
+        <div class="section-title">${sectionMarkers}</div>
         <table>
           <thead>
             <tr>
-              <th>ID</th>
-              <th>Categoria Reperto</th>
-              <th>Ascissa X (m)</th>
-              <th>Ordinata Y (m)</th>
-              <th>Quota Z (m)</th>
-              <th>Descrizione Verbale sul Campo</th>
+              <th>${colID}</th>
+              <th>${colTag}</th>
+              <th>${colX}</th>
+              <th>${colY}</th>
+              <th>${colZ}</th>
+              <th>${colDesc}</th>
             </tr>
           </thead>
           <tbody>
@@ -970,16 +1021,16 @@ export default function Forensic3DWorkspace({
         </table>
 
         ${trajectories.length > 0 ? `
-          <div class="section-title">Rilievo Traiettorie Balistiche e Vettori</div>
+          <div class="section-title">${sectionTraj}</div>
           <table>
             <thead>
               <tr>
-                <th>Vettore ID</th>
-                <th>Origine XYZ (m)</th>
-                <th>Impatto XYZ (m)</th>
-                <th>Azimuth (°)</th>
-                <th>Elevazione (°)</th>
-                <th>Indice Attendibilità</th>
+                <th>${colTrjID}</th>
+                <th>${colOrigin}</th>
+                <th>${colImpact}</th>
+                <th>${colAz}</th>
+                <th>${colEl}</th>
+                <th>${colConf}</th>
               </tr>
             </thead>
             <tbody>
@@ -997,25 +1048,25 @@ export default function Forensic3DWorkspace({
           </table>
         ` : ''}
 
-        <div class="section-title">Clausola di Certificazione Scientifica</div>
+        <div class="section-title">${sectionCert}</div>
         <div class="notes-box">
-          Le misurazioni spaziali tridimensionali e i vettori balistici registrati in questo verbale sono stati elaborati mediante l'ecosistema digitale FORA. Il core applicativo adotta l'ingegneria del software open-source per la fotogrammetria e il rendering grafico real-time (motori Meshroom, Blender e Godot). Ai sensi della Legge 397/2000 sulle Indagini Difensive nel codice di procedura penale italiano, le formule geometriche utilizzate sono pubbliche, riproducibili, verificabili dalle parti ed esenti da vincoli o alterazioni di sistemi a scatola chiusa proprietari.
+          ${certText}
         </div>
 
         <div class="signature-box">
           <div>
-            Luogo e Data:<br>
+            ${labelPlaceDate}:<br>
             ____________________________
           </div>
           <div class="sig-line">
-            Firma dell'Operatore Forense<br>
-            (${caseInfo.operator || "Perito Responsabile"})
+            ${labelSignature}<br>
+            (${caseInfo.operator || labelExpertTitle})
           </div>
         </div>
 
         <div style="text-align: center; margin-top: 60px;">
           <button onclick="window.print()" style="background-color: #0f172a; color: #ffffff; padding: 10px 24px; border: none; font-family: monospace; font-size: 13px; font-weight: bold; cursor: pointer; border-radius: 4px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-            Stampa / Salva in PDF Relazione Forense
+            ${lang === 'it' ? "Stampa / Salva in PDF Relazione Forense" : lang === 'es' ? "Imprimir / Guardar Informe Forense en PDF" : "Print / Save Forensic Report as PDF"}
           </button>
         </div>
       </body>
@@ -1026,9 +1077,9 @@ export default function Forensic3DWorkspace({
     if (printWindow) {
       printWindow.document.write(reportHtml);
       printWindow.document.close();
-      showNotification("Report giudiziario aperto in una nuova scheda pronto per la stampa!", "success");
+      showNotification(t.workspace.toast_report_success, "success");
     } else {
-      showNotification("Impossibile aprire la nuova finestra. Controlla il blocco popup.", "error");
+      showNotification(t.workspace.toast_report_popup_error, "error");
     }
   };
 
@@ -1065,11 +1116,11 @@ export default function Forensic3DWorkspace({
         <div className="absolute top-4 left-4 z-10 flex flex-col space-y-2">
           <div className="bg-slate-900/90 backdrop-blur-md text-[10px] sm:text-xs text-slate-300 px-3 py-1.5 rounded-lg border border-slate-800 flex items-center font-mono">
             <span className="h-2 w-2 rounded-full bg-emerald-500 mr-2 animate-ping"></span>
-            RESA 3D REAL-TIME • METRIC: 1:1
+            {lang === 'it' ? 'RESA 3D IN TEMPO REALE • METRICA: 1:1' : lang === 'es' ? 'RENDERIZADO 3D EN TIEMPO REAL • MÉTRICA: 1:1' : 'REAL-TIME 3D RENDER • METRIC: 1:1'}
           </div>
           {isLaserOn && (
             <div className="bg-emerald-950/90 backdrop-blur-md text-[10px] text-emerald-400 px-2.5 py-1 rounded-md border border-emerald-500/20 flex items-center font-mono w-max">
-              SCANNER LASER ATTIVO (Y = {laserScannerRef.current?.position.y.toFixed(2)}m)
+              {t.workspace.scan_active} (Y = {laserScannerRef.current?.position.y.toFixed(2)}m)
             </div>
           )}
         </div>
@@ -1079,23 +1130,23 @@ export default function Forensic3DWorkspace({
           <button 
             onClick={resetEntireWorkspace}
             className="bg-slate-900/95 hover:bg-slate-800/95 text-xs text-rose-400 hover:text-rose-300 font-semibold px-3 py-2 rounded-lg border border-slate-800 transition-all flex items-center space-x-1"
-            title="Resetta l'intera simulazione ed elimina i rilievi"
+            title={lang === 'it' ? "Resetta l'intera simulazione ed elimina i rilievi" : lang === 'es' ? "Restaurar toda la simulación y eliminar evidencias" : "Reset the entire simulation and clear evidence"}
           >
             <Trash2 className="h-3.5 w-3.5" />
-            <span>Ripristina</span>
+            <span>{t.workspace.reset_btn}</span>
           </button>
         </div>
 
         {/* Floating manual instruction cards */}
         <div className="absolute bottom-4 left-4 z-10 max-w-sm pointer-events-none bg-slate-950/90 backdrop-blur-md p-3.5 rounded-xl border border-slate-800 shadow-xl hidden sm:block">
           <span className="text-xs text-slate-300 block mb-1 font-bold flex items-center">
-            <Info className="h-3.5 w-3.5 text-emerald-400 mr-1" /> Interazione Spaziale 3D:
+            <Info className="h-3.5 w-3.5 text-emerald-400 mr-1" /> {t.workspace.instruction_title}
           </span>
           <ul className="text-[10px] text-slate-400 space-y-1 font-mono">
-            <li><b className="text-slate-300">ORBITA:</b> Trascina con Tasto Sinistro del mouse</li>
-            <li><b className="text-slate-300">PAN:</b> Trascina con Shift + Tasto Destro / Rotellina</li>
-            <li><b className="text-slate-300">ZOOM:</b> Usa la Rotellina del mouse</li>
-            <li><b className="text-slate-300">REPERTI:</b> Fai clic sulle superfici per posizionare il tag selezionato</li>
+            <li><b className="text-slate-300">{lang === 'it' ? "ORBITA" : lang === 'es' ? "ÓRBITA" : "ORBIT"}:</b> {lang === 'it' ? "Trascina con Tasto Sinistro del mouse" : lang === 'es' ? "Arrastra con el Botón Izquierdo del ratón" : "Drag with Left Mouse Button"}</li>
+            <li><b className="text-slate-300">PAN:</b> {lang === 'it' ? "Trascina con Shift + Tasto Destro / Rotellina" : lang === 'es' ? "Shift + Arrastrar Botón Derecho / Rueda del ratón" : "Drag with Shift + Right Mouse Button / Wheel"}</li>
+            <li><b className="text-slate-300">ZOOM:</b> {lang === 'it' ? "Usa la Rotellina del mouse" : lang === 'es' ? "Gira la Rueda del ratón" : "Use Mouse Wheel"}</li>
+            <li><b className="text-slate-300">{lang === 'it' ? "REPERTI" : lang === 'es' ? "EVIDENCIAS" : "EVIDENCE"}:</b> {lang === 'it' ? "Fai clic sulle superfici per posizionare il tag selezionato" : lang === 'es' ? "Haz clic en cualquier superficie para colocar el marcador seleccionado" : "Click on surfaces to place the selected tag"}</li>
           </ul>
         </div>
 
@@ -1116,12 +1167,12 @@ export default function Forensic3DWorkspace({
           <div className="space-y-2">
             <div className="flex items-center space-x-2 text-slate-100">
               <FolderOpen className="h-5 w-5 text-emerald-500" />
-              <h3 className="text-sm font-extrabold uppercase tracking-wider font-mono">Anagrafica Caso</h3>
+              <h3 className="text-sm font-extrabold uppercase tracking-wider font-mono">{t.workspace.case_title}</h3>
             </div>
             <div className="bg-slate-950/80 p-4 rounded-xl border border-slate-800/60 space-y-3">
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-[10px] uppercase font-bold text-slate-500">ID Caso</label>
+                  <label className="text-[10px] uppercase font-bold text-slate-500">{t.workspace.case_id}</label>
                   <input 
                     type="text" 
                     value={caseInfo.id} 
@@ -1130,7 +1181,7 @@ export default function Forensic3DWorkspace({
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] uppercase font-bold text-slate-500">Operatore</label>
+                  <label className="text-[10px] uppercase font-bold text-slate-500">{t.workspace.case_operator}</label>
                   <input 
                     type="text" 
                     value={caseInfo.operator} 
@@ -1140,7 +1191,7 @@ export default function Forensic3DWorkspace({
                 </div>
               </div>
               <div>
-                <label className="text-[10px] uppercase font-bold text-slate-500">Titolo Indagine</label>
+                <label className="text-[10px] uppercase font-bold text-slate-500">{t.workspace.case_name}</label>
                 <input 
                   type="text" 
                   value={caseInfo.title} 
@@ -1149,7 +1200,7 @@ export default function Forensic3DWorkspace({
                 />
               </div>
               <div>
-                <label className="text-[10px] uppercase font-bold text-slate-500">Località Scena</label>
+                <label className="text-[10px] uppercase font-bold text-slate-500">{t.workspace.case_loc}</label>
                 <input 
                   type="text" 
                   value={caseInfo.location} 
@@ -1163,21 +1214,21 @@ export default function Forensic3DWorkspace({
           {/* Section: Interactive Tools */}
           <div className="space-y-3">
             <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
-              <span>Strumenti d'Indagine</span>
-              <span className="bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded text-[9px] font-mono">Calibrazione 1:1</span>
+              <span>{t.workspace.markers_title}</span>
+              <span className="bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded text-[9px] font-mono">{lang === 'it' ? "Calibrazione 1:1" : lang === 'es' ? "Calibración 1:1" : "1:1 Calibration"}</span>
             </h4>
             
             {/* Tag Selection for Click placement */}
             <div className="bg-slate-950/80 p-4 rounded-xl border border-slate-800/60 space-y-3">
               <div>
-                <span className="text-[10px] uppercase font-bold text-slate-400 block mb-2">1. Seleziona tipo di reperto da posizionare:</span>
+                <span className="text-[10px] uppercase font-bold text-slate-400 block mb-2">{t.workspace.markers_select_type}</span>
                 <div className="grid grid-cols-2 gap-1.5">
                   {Object.keys(tagColors).map(tag => (
                     <button
                       key={tag}
                       onClick={() => {
                         setSelectedTag(tag);
-                        showNotification(`Pronto a posizionare: ${tag}. Fai clic nella scena 3D.`, 'info');
+                        showNotification(lang === 'it' ? `Pronto a posizionare: ${tag}. Fai clic nella scena 3D.` : lang === 'es' ? `Listo para colocar: ${tag}. Haz clic en la escena 3D.` : `Ready to place: ${tag}. Click in the 3D scene.`, 'info');
                       }}
                       className={`px-2.5 py-1.5 rounded-lg text-left text-xs font-medium transition-all flex items-center space-x-1.5 border ${
                         selectedTag === tag 
@@ -1197,14 +1248,14 @@ export default function Forensic3DWorkspace({
 
               {/* Dynamic Trajectory Generator & Laser Scanner controls */}
               <div className="border-t border-slate-900 pt-3 space-y-2">
-                <span className="text-[10px] uppercase font-bold text-slate-400 block">2. Azioni Strumentali:</span>
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">{lang === 'it' ? "2. Azioni Strumentali:" : lang === 'es' ? "2. Acciones Instrumentales:" : "2. Instrumental Actions:"}</span>
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     onClick={generateTrajectory}
                     className="bg-emerald-950/60 hover:bg-emerald-900 text-emerald-300 hover:text-emerald-100 py-2 px-2.5 rounded-xl text-xs font-semibold border border-emerald-500/20 transition-all flex items-center justify-center space-x-1 shadow-inner"
                   >
                     <Crosshair className="h-3.5 w-3.5 text-emerald-400" />
-                    <span>Angolo Balistica</span>
+                    <span>{lang === 'it' ? "Angolo Balistica" : lang === 'es' ? "Ángulo Balística" : "Ballistic Angle"}</span>
                   </button>
                   <button
                     onClick={toggleLaserScanner}
@@ -1222,11 +1273,11 @@ export default function Forensic3DWorkspace({
 
               {/* Upload customized file imports */}
               <div className="border-t border-slate-900 pt-3 space-y-2">
-                <span className="text-[10px] uppercase font-bold text-slate-400 block">3. Importa Planimetria / Mesh 3D:</span>
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">{lang === 'it' ? "3. Importa Planimetria / Mesh 3D:" : lang === 'es' ? "3. Importar Planimetría / Malla 3D:" : "3. Import Floorplan / 3D Mesh:"}</span>
                 <div className="grid grid-cols-2 gap-2">
                   <label className="flex flex-col items-center justify-center bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-slate-700 py-2.5 rounded-xl cursor-pointer transition-all text-slate-400 group">
                     <Camera className="h-4 w-4 text-emerald-500 group-hover:scale-115 transition-transform" />
-                    <span className="text-[10px] font-semibold mt-1">Carica Mappa 2D</span>
+                    <span className="text-[10px] font-semibold mt-1">{lang === 'it' ? "Carica Mappa 2D" : lang === 'es' ? "Cargar Mapa 2D" : "Load 2D Map"}</span>
                     <input 
                       type="file" 
                       accept="image/*" 
@@ -1236,7 +1287,7 @@ export default function Forensic3DWorkspace({
                   </label>
                   <label className="flex flex-col items-center justify-center bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-slate-700 py-2.5 rounded-xl cursor-pointer transition-all text-slate-400 group">
                     <Maximize2 className="h-4 w-4 text-sky-400 group-hover:scale-115 transition-transform" />
-                    <span className="text-[10px] font-semibold mt-1">Carica File 3D</span>
+                    <span className="text-[10px] font-semibold mt-1">{lang === 'it' ? "Carica File 3D" : lang === 'es' ? "Cargar Archivo 3D" : "Load 3D File"}</span>
                     <input 
                       type="file" 
                       accept=".obj,.gltf,.glb" 
@@ -1253,31 +1304,31 @@ export default function Forensic3DWorkspace({
           <div className="space-y-2">
             <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center space-x-1">
               <Ruler className="h-3.5 w-3.5 text-emerald-500" />
-              <span>Calcolatore Distanze Relativo</span>
+              <span>{t.workspace.markers_btn_dist}</span>
             </h4>
             <div className="bg-slate-950/80 p-4 rounded-xl border border-slate-800/60 space-y-3">
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-[9px] uppercase font-bold text-slate-500">Da Reperto</label>
+                  <label className="text-[9px] uppercase font-bold text-slate-500">{lang === 'it' ? "Da Reperto" : lang === 'es' ? "Desde Testigo" : "From Marker"}</label>
                   <select 
                     value={measurementFrom || ""} 
                     onChange={e => setMeasurementFrom(e.target.value ? Number(e.target.value) : null)}
                     className="w-full bg-slate-900 border border-slate-800 focus:border-emerald-500 focus:outline-none rounded px-2 py-1 text-xs text-slate-300 font-mono"
                   >
-                    <option value="">Seleziona...</option>
+                    <option value="">{lang === 'it' ? "Seleziona..." : lang === 'es' ? "Seleccionar..." : "Select..."}</option>
                     {markers.map(m => (
                       <option key={m.id} value={m.id}>{m.name} ({m.tag})</option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="text-[9px] uppercase font-bold text-slate-500">A Reperto</label>
+                  <label className="text-[9px] uppercase font-bold text-slate-500">{lang === 'it' ? "A Reperto" : lang === 'es' ? "A Testigo" : "To Marker"}</label>
                   <select 
                     value={measurementTo || ""} 
                     onChange={e => setMeasurementTo(e.target.value ? Number(e.target.value) : null)}
                     className="w-full bg-slate-900 border border-slate-800 focus:border-emerald-500 focus:outline-none rounded px-2 py-1 text-xs text-slate-300 font-mono"
                   >
-                    <option value="">Seleziona...</option>
+                    <option value="">{lang === 'it' ? "Seleziona..." : lang === 'es' ? "Seleccionar..." : "Select..."}</option>
                     {markers.map(m => (
                       <option key={m.id} value={m.id}>{m.name} ({m.tag})</option>
                     ))}
@@ -1287,7 +1338,7 @@ export default function Forensic3DWorkspace({
               
               {calculatedDistance !== null && (
                 <div className="bg-emerald-950/30 border border-emerald-500/20 p-2.5 rounded-lg flex items-center justify-between">
-                  <span className="text-[11px] text-emerald-400 font-bold uppercase tracking-wider">Distanza Metrica:</span>
+                  <span className="text-[11px] text-emerald-400 font-bold uppercase tracking-wider">{t.workspace.markers_dist_result}</span>
                   <span className="font-mono text-xs font-black text-white bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 shadow">
                     {calculatedDistance.toFixed(3)} m
                   </span>
@@ -1299,14 +1350,14 @@ export default function Forensic3DWorkspace({
           {/* Section: Log of evidence */}
           <div className="space-y-2">
             <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-              Dossier Reperti Registrati ({markers.length})
+              {lang === 'it' ? `Dossier Reperti Registrati (${markers.length})` : lang === 'es' ? `Dossier de Evidencias Registradas (${markers.length})` : `Registered Evidence Dossier (${markers.length})`}
             </h4>
             
             <div className="space-y-2 max-h-[190px] overflow-y-auto pr-1">
               {markers.length === 0 ? (
                 <div className="text-center py-6 bg-slate-950/40 rounded-xl border border-dashed border-slate-800">
                   <MapPin className="h-6 w-6 text-slate-600 mx-auto mb-1.5" />
-                  <p className="text-[11px] text-slate-500">Nessun reperto inserito. Clicca sulla mappa 3D per contrassegnare le prove.</p>
+                  <p className="text-[11px] text-slate-500">{t.workspace.markers_empty}</p>
                 </div>
               ) : (
                 markers.map(m => (
@@ -1320,7 +1371,7 @@ export default function Forensic3DWorkspace({
                       <button 
                         onClick={() => {
                           setMarkers(prev => prev.filter(item => item.id !== m.id));
-                          showNotification(`Rimosso ${m.name}`, 'info');
+                          showNotification(lang === 'it' ? `Rimosso ${m.name}` : lang === 'es' ? `Eliminado ${m.name}` : `Removed ${m.name}`, 'info');
                         }}
                         className="text-slate-500 hover:text-rose-400 transition-colors"
                       >
@@ -1335,12 +1386,12 @@ export default function Forensic3DWorkspace({
                         const val = e.target.value;
                         setMarkers(prev => prev.map(item => item.id === m.id ? { ...item, description: val } : item));
                       }}
-                      placeholder="Dettagli e note sul reperto..."
+                      placeholder={lang === 'it' ? "Dettagli e note sul reperto..." : lang === 'es' ? "Detalles y notas de la evidencia..." : "Details and notes on evidence..."}
                       className="w-full bg-slate-900 border border-slate-800 focus:border-emerald-500 focus:outline-none rounded px-2 py-1 text-[11px] text-slate-300"
                     />
 
                     <div className="flex items-center justify-between text-[9px] text-slate-500 font-mono">
-                      <span>XYZ Coordinate: {m.x.toFixed(2)}, {m.y.toFixed(2)}, {m.z.toFixed(2)}</span>
+                      <span>{lang === 'it' ? "Coordinate XYZ" : lang === 'es' ? "Coordenadas XYZ" : "XYZ Coordinates"}: {m.x.toFixed(2)}, {m.y.toFixed(2)}, {m.z.toFixed(2)}</span>
                     </div>
                   </div>
                 ))
@@ -1358,14 +1409,14 @@ export default function Forensic3DWorkspace({
               className="bg-slate-950 hover:bg-slate-900 text-slate-300 text-xs py-2.5 px-3 rounded-xl border border-slate-800 hover:border-slate-700 transition-all font-semibold font-mono flex items-center justify-center space-x-1.5"
             >
               <FileCode className="h-4 w-4 text-emerald-500" />
-              <span>Dossier JSON</span>
+              <span>{t.workspace.btn_export_json}</span>
             </button>
             <button 
               onClick={exportCourthouseReport}
               className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 text-xs py-2.5 px-3 rounded-xl font-extrabold transition-all shadow-lg shadow-emerald-500/20 flex items-center justify-center space-x-1.5"
             >
               <FileSpreadsheet className="h-4 w-4" />
-              <span>Stampa Report</span>
+              <span>{t.workspace.btn_export_report}</span>
             </button>
           </div>
         </div>
