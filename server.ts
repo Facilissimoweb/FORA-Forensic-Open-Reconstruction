@@ -45,12 +45,12 @@ app.post("/api/chat", async (req, res) => {
       return res.status(400).json({ error: "Invalid request format. 'messages' array is required." });
     }
 
-    const client = getGeminiClient();
-    if (!client) {
+    const apiKey = process.env.GROQ_API_KEY;
+    if (!apiKey) {
       return res.json({ 
         text: activeLanguage === "it" 
-          ? "La chiave API Gemini non è configurata. Per favore inseriscila nei Segreti dell'app (Settings > Secrets)." 
-          : "The Gemini API Key is not configured. Please add it to your app's Secrets panel (Settings > Secrets)." 
+          ? "La chiave API Groq (GROQ_API_KEY) non è configurata. Per favore inseriscila nei Segreti dell'app (Settings > Secrets) o nelle variabili d'ambiente di Vercel." 
+          : "The Groq API Key (GROQ_API_KEY) is not configured. Please add it to your app's Secrets panel (Settings > Secrets) or Vercel environment variables." 
       });
     }
 
@@ -76,28 +76,45 @@ Answer in the language of the user's query (defaults to Italian, but respond in 
 Explain forensic concepts, crime scene mapping, bullet trajectories, and standard legal procedures in Italy (like Law 397/2000 regarding defensive investigations) in a clear, accurate, and scientifically sound way.
 Keep explanations concise, focused on evidence and reconstruction, and guide the user on how they can place markers and draw trajectories in the 3D canvas above.`;
 
-    // Map message list to Gemini contents format
-    // Roles in Gemini SDK: 'user' and 'model'
-    const contents = messages.map((msg: any) => ({
-      role: msg.role === "assistant" ? "model" : "user",
-      parts: [{ text: msg.content }]
-    }));
+    // Map messages list to standard Chat Completions format
+    const formattedMessages = [
+      {
+        role: "system",
+        content: systemInstruction
+      },
+      ...messages.map((msg: any) => ({
+        role: msg.role === "assistant" ? "assistant" : "user",
+        content: msg.content
+      }))
+    ];
 
-    // Call generateContent
-    const response = await client.models.generateContent({
-      model: "gemini-3.5-flash",
-      contents: contents,
-      config: {
-        systemInstruction: systemInstruction,
-        temperature: 0.7,
-      }
+    // Call Groq API via standard Fetch
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: "llama-3.3-70b-versatile",
+        messages: formattedMessages,
+        temperature: 0.7
+      })
     });
 
-    res.json({ text: response.text });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Groq API returned status ${response.status}: ${errorText}`);
+    }
+
+    const data = await response.json();
+    const responseText = data?.choices?.[0]?.message?.content || "";
+
+    res.json({ text: responseText });
   } catch (error: any) {
-    console.error("Gemini API error:", error);
+    console.error("Groq API error:", error);
     res.status(500).json({ 
-      error: "Failed to communicate with Gemini API", 
+      error: "Failed to communicate with Groq API", 
       details: error?.message || String(error) 
     });
   }
